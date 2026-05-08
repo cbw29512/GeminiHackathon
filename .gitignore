@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+
+# Local environment / secrets
+.env
+*.env
+secrets/
+token.json
+client_secret*.json
+credentials*.json
+
+# Local model files
+*.gguf
+*.safetensors
+*.bin
+*.onnx
+
+# Local logs / captures / private telemetry
+*.pcap
+*.pcapng
+*.evtx
+*.log
+data/
+captures/
+private/
+raw/
+exports/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated demo media
+screenshots/
+recordings/
+videos/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

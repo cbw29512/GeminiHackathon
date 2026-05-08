@@ -17,13 +17,15 @@ from services.llm_analyzer import (
     GemmaError,
 )
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(PROJECT_ROOT / "templates"))
 
-app = FastAPI(title="NetGuard AI Analysis API", version="0.4.0")
+MAX_LOG_CHARS = 50_000
+
+app = FastAPI(title="NetGuard AI Analysis API", version="0.4.1")
 
 
 class LogAutopsyRequest(BaseModel):
@@ -37,6 +39,7 @@ def read_root():
         "status": "online",
         "engine": "Gemma 4 E4B (Q8_0)",
         "endpoints": ["/analyze", "/analyze-logs", "/ui", "/sample-logs"],
+        "max_log_chars": MAX_LOG_CHARS,
     }
 
 
@@ -48,11 +51,13 @@ def ui(request: Request):
 
 @app.get("/sample-logs", response_class=PlainTextResponse)
 def sample_logs():
-    """Returns the sanitized sample eve.json. Used by the UI's 'Load sample' button."""
+    """Return sanitized sample eve.json for the UI demo."""
     sanitizer = PROJECT_ROOT / "scripts" / "sanitize_logs.py"
     sample = PROJECT_ROOT / "scripts" / "sample_eve.json"
+
     if not sanitizer.exists() or not sample.exists():
-        raise HTTPException(status_code=500, detail="Sample assets missing")
+        raise HTTPException(status_code=500, detail="Sample assets missing.")
+
     try:
         result = subprocess.run(
             [sys.executable, str(sanitizer), "--input", str(sample), "--seed", "42"],
@@ -62,33 +67,47 @@ def sample_logs():
             check=True,
         )
         return result.stdout
-    except subprocess.CalledProcessError as e:
-        raise HTTPException(status_code=500, detail=f"Sanitizer failed: {e.stderr}") from e
+    except subprocess.TimeoutExpired as exc:
+        logger.exception("Sanitizer timed out.")
+        raise HTTPException(status_code=500, detail="Sample sanitizer timed out.") from exc
+    except subprocess.CalledProcessError as exc:
+        logger.exception("Sanitizer failed.")
+        raise HTTPException(status_code=500, detail="Sample sanitizer failed.") from exc
 
 
 @app.post("/analyze", response_model=SecurityAlert)
 async def analyze_threat(anomaly: NetworkAnomaly):
     """Single-anomaly analysis."""
     try:
-        logger.info(f"Analyzing anomaly from {anomaly.source_ip}")
+        logger.info("Analyzing anomaly from %s", anomaly.source_ip)
         return await analyze_traffic_with_gemma(anomaly)
-    except GemmaError as e:
-        logger.error(f"Inference failure: {e}")
-        raise HTTPException(status_code=502, detail=str(e))
+    except GemmaError as exc:
+        logger.exception("Inference failure.")
+        raise HTTPException(status_code=502, detail="Local Gemma inference failed.") from exc
 
 
 @app.post("/analyze-logs", response_model=IncidentReport)
 async def analyze_logs(request: LogAutopsyRequest):
     """Long-context log autopsy. The hero feature."""
-    if not request.logs.strip():
-        raise HTTPException(status_code=400, detail="Empty log block")
-    char_count = len(request.logs)
-    logger.info(f"Log autopsy: {char_count} chars (~{char_count // 4} tokens estimate)")
+    logs = request.logs.strip()
+
+    if not logs:
+        raise HTTPException(status_code=400, detail="Empty log block.")
+
+    if len(logs) > MAX_LOG_CHARS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Log block too large. Max allowed characters: {MAX_LOG_CHARS}.",
+        )
+
+    char_count = len(logs)
+    logger.info("Log autopsy: %s chars (~%s tokens estimate)", char_count, char_count // 4)
+
     try:
-        return await analyze_logs_with_gemma(request.logs, request.time_window)
-    except GemmaError as e:
-        logger.error(f"Inference failure: {e}")
-        raise HTTPException(status_code=502, detail=str(e))
+        return await analyze_logs_with_gemma(logs, request.time_window)
+    except GemmaError as exc:
+        logger.exception("Inference failure.")
+        raise HTTPException(status_code=502, detail="Local Gemma inference failed.") from exc
 
 
 if __name__ == "__main__":

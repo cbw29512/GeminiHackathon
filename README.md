@@ -1,4 +1,4 @@
-# NetGuard SOC — Gemma 4 Local Inference
+# NetGuard SOC â€” Gemma 4 Local Inference
 
 Local-first AI security analysis layer for the NetGuard SOC stack. Submits to the Dev.to Gemma 4 Challenge (Build with Gemma 4 prompt, deadline May 24, 2026).
 
@@ -62,4 +62,4 @@ python scripts/stress_test.py
 
 ## Status
 
-See `PROJECT_LOG.md` for the live execution log. Phases 1–4 complete; long-context log autopsy in progress.
+See `PROJECT_LOG.md` for the live execution log. Phases 1â€“4 complete; long-context log autopsy in progress.

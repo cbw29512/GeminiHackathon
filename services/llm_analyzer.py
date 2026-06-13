@@ -33,6 +33,8 @@ async def _call_gemma(prompt: str, system: Optional[str] = None) -> str:
             response.raise_for_status()
         except httpx.HTTPError as e:
             raise GemmaError(f"Ollama request failed: {e}") from e
+        except Exception as e:
+            raise GemmaError(f"Unexpected error during Ollama request: {e}") from e
 
     body = response.json()
     raw = body.get("response", "")

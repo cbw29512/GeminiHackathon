@@ -1,45 +1,59 @@
-from datetime import datetime
-from typing import List, Optional, Literal
+"""Validated input and output schemas for local security analysis."""
 
-from pydantic import BaseModel, Field
+from datetime import datetime
+from ipaddress import IPv4Address, IPv6Address
+from typing import List, Literal, Optional, Union
+
+from pydantic import BaseModel, ConfigDict, Field
 
 Severity = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
 AlertSeverity = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW"]
 Confidence = Literal["HIGH", "MEDIUM", "LOW"]
+IPAddress = Union[IPv4Address, IPv6Address]
 
 
-class NetworkAnomaly(BaseModel):
-    """Input: a single flagged network event."""
+class StrictModel(BaseModel):
+    """Reject unexpected fields so API and model contracts stay explicit."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class NetworkAnomaly(StrictModel):
+    """A single bounded, sanitized network event."""
+
     timestamp: datetime
-    source_ip: str
-    destination_ip: str
-    protocol: str
-    flagged_reason: str = Field(..., description="The heuristic that triggered the flag")
-    payload_snippet: Optional[str] = Field(default=None, description="Sanitized truncated payload")
+    source_ip: IPAddress
+    destination_ip: IPAddress
+    protocol: str = Field(min_length=1, max_length=32)
+    flagged_reason: str = Field(min_length=1, max_length=1_000)
+    payload_snippet: Optional[str] = Field(default=None, max_length=4_000)
 
 
-class SecurityAlert(BaseModel):
-    """Output of single-anomaly analysis. Returned by POST /analyze."""
-    severity: AlertSeverity = Field(..., description="CRITICAL | HIGH | MEDIUM | LOW")
-    analysis: str = Field(..., description="2-3 sentence explanation")
-    mitigation_steps: List[str] = Field(..., description="Actionable next steps")
+class SecurityAlert(StrictModel):
+    """Validated result of single-anomaly analysis."""
+
+    severity: AlertSeverity
+    analysis: str = Field(min_length=1, max_length=4_000)
+    mitigation_steps: List[str] = Field(min_length=1, max_length=20)
 
 
-class TimelineEvent(BaseModel):
-    """One ordered step inside an incident timeline."""
-    timestamp: str
-    actor: str
-    target: str
-    action: str
-    significance: str
+class TimelineEvent(StrictModel):
+    """One bounded step in an incident timeline."""
+
+    timestamp: str = Field(min_length=1, max_length=100)
+    actor: str = Field(min_length=1, max_length=500)
+    target: str = Field(min_length=1, max_length=500)
+    action: str = Field(min_length=1, max_length=1_000)
+    significance: str = Field(min_length=1, max_length=2_000)
 
 
-class IncidentReport(BaseModel):
-    """Output of long-context log autopsy. Returned by POST /analyze-logs."""
-    incident_summary: str = Field(..., description="2-3 sentence overview")
-    severity: Severity = Field(..., description="CRITICAL | HIGH | MEDIUM | LOW | INFO")
-    confidence: Confidence = Field(..., description="HIGH | MEDIUM | LOW")
-    attack_chain: List[str] = Field(..., description="Ordered kill-chain stages observed")
-    timeline: List[TimelineEvent] = Field(..., description="Chronological events with reasoning")
-    iocs: List[str] = Field(..., description="Indicators of compromise")
-    triage_recommendations: List[str] = Field(..., description="Actionable next steps")
+class IncidentReport(StrictModel):
+    """Validated result of long-context log analysis."""
+
+    incident_summary: str = Field(min_length=1, max_length=6_000)
+    severity: Severity
+    confidence: Confidence
+    attack_chain: List[str] = Field(max_length=30)
+    timeline: List[TimelineEvent] = Field(max_length=200)
+    iocs: List[str] = Field(max_length=500)
+    triage_recommendations: List[str] = Field(max_length=50)
